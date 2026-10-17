@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Robot vs Portero</title>
+<style>
+  body { margin: 0; background: #0b1d12; color: #f5f5f5; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+  h1 { font-size: 1.4rem; margin: 12px 0 4px; }
+  #stats { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 6px 0; font-size: .95rem; }
+  #stats div { background: #16352a; padding: 6px 10px; border-radius: 8px; }
+  canvas { width: 100%; max-width: 400px; height: auto; background: #2e8b57; border-radius: 12px; touch-action: none; }
+  #msg { min-height: 1.5em; margin: 8px; font-weight: 600; text-align: center; }
+  button { background: #f5c542; border: 0; border-radius: 8px; padding: 10px 18px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+  p.help { font-size: .85rem; opacity: .8; text-align: center; max-width: 400px; padding: 0 16px; }
+</style>
+</head>
+<body>
+<h1>🤖 Robot vs Portero ⚽</h1>
+<div id="stats">
+  <div>Atajadas: <b id="saves">0</b>/10</div>
+  <div>Goles recibidos: <b id="goals">0</b>/5</div>
+  <div>Nivel del robot: <b id="level">1</b></div>
+</div>
+<p class="help" id="skills"></p>
+<canvas id="c" width="400" height="600"></canvas>
+<div id="msg"></div>
+<button id="restart" hidden>Jugar de nuevo</button>
+<p class="help">Mueve el mouse o el dedo para mover al portero (o usa las flechas ← →). Gana si atajas 10 tiros. Pierdes si el robot te mete 5 goles. Cada atajada hace al robot más rápido, más preciso y más astuto.</p>
+<script>
+const W = 400, H = 600;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+
+const WIN_SAVES = 10, LOSE_GOALS = 5;
+const GOAL = { x: 70, y: 30, w: 260 };
+const KEEPER = { x: W / 2, target: W / 2, y: 120, w: 56, h: 22 };
+const ROBOT = { x: W / 2, y: 530 };
+const keys = {};
+let balls, saves, goals, level, nextShot, state, lastT;
+
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+// Habilidades del robot: suben con cada atajada
+function skills() {
+  return {
+    velocidad: 3.5 + 0.45 * level,                    // px por frame
+    precision: Math.max(4, 50 - 5 * level),           // error de puntería (px)
+    cadencia: Math.max(600, 2200 - 130 * level),      // ms entre tiros
+    astucia: Math.min(0.8, 0.1 + 0.07 * level)        // prob. de apuntar al portero
+  };
+}
+
+function reset() {
+  balls = []; saves = 0; goals = 0; level = 1; state = 'play';
+  KEEPER.x = KEEPER.target = W / 2;
+  nextShot = performance.now() + 1200;
+  $('msg').textContent = '¡Empieza el partido!';
+  $('restart').hidden = true;
+  updateHUD();
+}
+
+function updateHUD() {
+  const s = skills();
+  $('saves').textContent = saves;
+  $('goals').textContent = goals;
+  $('level').textContent = level;
+  $('skills').textContent = `Velocidad ${s.velocidad.toFixed(1)} · Puntería ±${s.precision.toFixed(0)} px · Tiro cada ${(s.cadencia / 1000).toFixed(1)} s · Astucia ${Math.round(s.astucia * 100)}%`;
+}
+
+function shoot() {
+  const s = skills();
+  let tx = GOAL.x + GOAL.w / 2 + (Math.random() * 2 - 1) * (GOAL.w / 2 + 40);
+  if (Math.random() < s.astucia) tx = KEEPER.x;     // a veces apunta donde está el portero
+  tx += (Math.random() * 2 - 1) * s.precision;
+  const dx = tx - ROBOT.x, dy = GOAL.y - ROBOT.y, len = Math.hypot(dx, dy);
+  balls.push({ x: ROBOT.x, y: ROBOT.y, vx: dx / len * s.velocidad, vy: dy / len * s.velocidad, checked: false, done: false });
+  nextShot = performance.now() + s.cadencia;
+}
+
+function checkEnd() {
+  if (saves >= WIN_SAVES) { state = 'over'; $('msg').textContent = '¡Ganaste! Atajaste 10 tiros del robot 🎉'; }
+  else if (goals >= LOSE_GOALS) { state = 'over'; $('msg').textContent = 'El robot gana 🤖 ¡Inténtalo otra vez!'; }
+  if (state === 'over') $('restart').hidden = false;
+}
+
+function update(dt) {
+  const f = dt / 16.67;
+  if (keys.ArrowLeft) KEEPER.target -= 6 * f;
+  if (keys.ArrowRight) KEEPER.target += 6 * f;
+  KEEPER.target = clamp(KEEPER.target, GOAL.x + KEEPER.w / 2, GOAL.x + GOAL.w - KEEPER.w / 2);
+  KEEPER.x += (KEEPER.target - KEEPER.x) * Math.min(1, 0.25 * f);
+
+  if (state !== 'play') return;
+  if (performance.now() > nextShot) shoot();
+
+  for (const b of balls) {
+    if (b.done) continue;
+    b.x += b.vx * f; b.y += b.vy * f;
+
+    if (!b.checked && b.y <= KEEPER.y) {
+      b.checked = true;
+      if (Math.abs(b.x - KEEPER.x) <= KEEPER.w / 2 + 7) {
+        b.done = true; saves++; level++;
+        $('msg').textContent = `¡Atajada! El robot sube a nivel ${level} 🤖`;
+        updateHUD(); checkEnd();
+        continue;
+      }
+    }
+    if (b.y <= GOAL.y) {
+      b.done = true;
+      if (b.x >= GOAL.x && b.x <= GOAL.x + GOAL.w) {
+        goals++; $('msg').textContent = '¡GOL del robot! 🤖⚽';
+      } else {
+        $('msg').textContent = '¡Tiro desviado!';
+      }
+      updateHUD(); checkEnd();
+    }
+  }
+  balls = balls.filter(b => !b.done);
+}
+
+function draw() {
+  // cancha
+  ctx.fillStyle = '#2e8b57'; ctx.fillRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 60) { ctx.fillStyle = 'rgba(0,0,0,.05)'; ctx.fillRect(0, y, W, 30); }
+  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2;
+  ctx.strokeRect(20, 20, W - 40, H - 40);
+  ctx.strokeRect(GOAL.x - 60, GOAL.y, GOAL.w + 120, 150);
+
+  // portería con red
+  ctx.fillStyle = 'rgba(255,255,255,.15)';
+  ctx.fillRect(GOAL.x, GOAL.y - 20, GOAL.w, 20);
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.35)';
+  for (let x = GOAL.x; x <= GOAL.x + GOAL.w; x += 16) {
+    ctx.beginPath(); ctx.moveTo(x, GOAL.y); ctx.lineTo(x, GOAL.y - 20); ctx.stroke();
+  }
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(GOAL.x, GOAL.y); ctx.lineTo(GOAL.x, GOAL.y - 20);
+  ctx.lineTo(GOAL.x + GOAL.w, GOAL.y - 20); ctx.lineTo(GOAL.x + GOAL.w, GOAL.y);
+  ctx.stroke();
+
+  // portero humano
+  const k = KEEPER;
+  ctx.fillStyle = '#ff7043';
+  ctx.fillRect(k.x - k.w / 2, k.y - k.h / 2, k.w, k.h);
+  ctx.fillStyle = '#ffd7b5';
+  ctx.beginPath(); ctx.arc(k.x, k.y - k.h / 2 - 10, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(k.x - k.w / 2, k.y, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(k.x + k.w / 2, k.y, 6, 0, Math.PI * 2); ctx.fill();
+
+  // robot
+  const r = ROBOT;
+  ctx.strokeStyle = '#78909c'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(r.x, r.y - 52); ctx.lineTo(r.x, r.y - 64); ctx.stroke();
+  ctx.fillStyle = '#ff1744';
+  ctx.beginPath(); ctx.arc(r.x, r.y - 66, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#b0bec5';
+  ctx.fillRect(r.x - 26, r.y - 50, 52, 42);
+  ctx.fillStyle = '#607d8b';
+  ctx.fillRect(r.x - 30, r.y - 8, 60, 18);
+  ctx.fillStyle = level >= 6 ? '#ff1744' : '#00e5ff';
+  ctx.fillRect(r.x - 16, r.y - 40, 10, 8);
+  ctx.fillRect(r.x + 6, r.y - 40, 10, 8);
+
+  // balones
+  for (const b of balls) {
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+}
+
+function loop(t) {
+  const dt = Math.min(50, t - (lastT || t));
+  lastT = t;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function pointerX(e) {
+  const rect = cv.getBoundingClientRect();
+  return (e.clientX - rect.left) * W / rect.width;
+}
+cv.addEventListener('pointermove', e => { KEEPER.target = pointerX(e); });
+cv.addEventListener('pointerdown', e => { KEEPER.target = pointerX(e); });
+addEventListener('keydown', e => { keys[e.key] = true; if (e.key.startsWith('Arrow')) e.preventDefault(); });
+addEventListener('keyup', e => { keys[e.key] = false; });
+$('restart').onclick = reset;
+
+reset();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
