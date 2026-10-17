@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Esquiva los balones</title>
+<style>
+  body { margin: 0; background: #0b1d12; color: #f5f5f5; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+  h1 { font-size: 1.4rem; margin: 12px 0 4px; }
+  #hud { display: flex; gap: 10px; margin: 6px 0; font-size: 1rem; }
+  #hud div { background: #16352a; padding: 6px 12px; border-radius: 8px; }
+  canvas { width: 100%; max-width: 400px; height: auto; background: #2e8b57; border-radius: 12px; touch-action: none; }
+  #msg { min-height: 1.5em; margin: 8px; font-weight: 600; text-align: center; }
+  button { background: #f5c542; border: 0; border-radius: 8px; padding: 10px 18px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+  p.help { font-size: .85rem; opacity: .8; text-align: center; max-width: 400px; padding: 0 16px; }
+</style>
+</head>
+<body>
+<h1>⚽ Esquiva los balones</h1>
+<div id="hud">
+  <div>Puntos: <b id="score">0</b></div>
+  <div>Récord: <b id="best">0</b></div>
+</div>
+<canvas id="c" width="400" height="600"></canvas>
+<div id="msg"></div>
+<button id="restart" hidden>Jugar de nuevo</button>
+<p class="help">Mueve el mouse o el dedo para mover a tu jugador (o usa ← →). Cada balón que esquivas suma un punto. Si te toca uno, termina el juego. Cada 10 puntos los balones caen más rápido.</p>
+<script>
+const W = 400, H = 600;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+
+const P = { x: W / 2, target: W / 2, y: H - 60, r: 18 };
+const keys = {};
+let balls, score, best, state, nextSpawn, lastT = 0;
+
+try { best = Number(localStorage.getItem('esquivaBest')) || 0; } catch (e) { best = 0; }
+$('best').textContent = best;
+
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function level() { return Math.floor(score / 10); }
+function fallSpeed() { return 2.2 + level() * 0.35; }              // px por frame
+function spawnGap() { return Math.max(350, 1100 - level() * 70); } // ms entre balones
+
+function reset() {
+  balls = []; score = 0; state = 'play';
+  P.x = P.target = W / 2;
+  nextSpawn = performance.now() + 600;
+  $('msg').textContent = '¡Esquiva!';
+  $('restart').hidden = true;
+  $('score').textContent = 0;
+}
+
+function spawn() {
+  const r = 14;
+  balls.push({ x: r + Math.random() * (W - 2 * r), y: -r, r, vy: fallSpeed() * (0.8 + Math.random() * 0.4), counted: false });
+  nextSpawn = performance.now() + spawnGap();
+}
+
+function endGame() {
+  state = 'over';
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem('esquivaBest', best); } catch (e) {}
+  }
+  $('best').textContent = best;
+  $('msg').textContent = `¡Te tocó! Llegaste a ${score} puntos`;
+  $('restart').hidden = false;
+}
+
+function update(dt) {
+  const f = dt / 16.67;
+  if (keys.ArrowLeft) P.target -= 7 * f;
+  if (keys.ArrowRight) P.target += 7 * f;
+  P.target = clamp(P.target, P.r, W - P.r);
+  P.x += (P.target - P.x) * Math.min(1, 0.3 * f);
+
+  if (state !== 'play') return;
+  if (performance.now() > nextSpawn) spawn();
+
+  for (const b of balls) {
+    b.y += b.vy * f;
+    if (Math.hypot(b.x - P.x, b.y - P.y) < b.r + P.r) { endGame(); return; }
+    if (!b.counted && b.y > H) { b.counted = true; score++; $('score').textContent = score; }
+  }
+  balls = balls.filter(b => b.y < H + b.r);
+}
+
+function draw() {
+  ctx.fillStyle = '#2e8b57'; ctx.fillRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 60) { ctx.fillStyle = 'rgba(0,0,0,.05)'; ctx.fillRect(0, y, W, 30); }
+  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2;
+  ctx.strokeRect(20, 20, W - 40, H - 40);
+
+  // jugador
+  ctx.fillStyle = '#1e88e5';
+  ctx.beginPath(); ctx.arc(P.x, P.y, P.r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffd7b5';
+  ctx.beginPath(); ctx.arc(P.x, P.y - P.r - 6, 9, 0, Math.PI * 2); ctx.fill();
+
+  // balones
+  for (const b of balls) {
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.4, 0, Math.PI * 2); ctx.fill();
+  }
+
+  if (state === 'over') { ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(0, 0, W, H); }
+}
+
+function loop(t) {
+  const dt = Math.min(50, t - (lastT || t));
+  lastT = t;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function pointerX(e) {
+  const rect = cv.getBoundingClientRect();
+  return (e.clientX - rect.left) * W / rect.width;
+}
+cv.addEventListener('pointermove', e => { P.target = pointerX(e); });
+cv.addEventListener('pointerdown', e => { P.target = pointerX(e); });
+addEventListener('keydown', e => { keys[e.key] = true; if (e.key.startsWith('Arrow')) e.preventDefault(); });
+addEventListener('keyup', e => { keys[e.key] = false; });
+$('restart').onclick = reset;
+
+reset();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
