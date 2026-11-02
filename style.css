@@ -1,0 +1,104 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #f0f2f5;
+  color: #222;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+}
+
+.contenedor {
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  align-self: flex-start;
+  margin-top: 40px;
+}
+
+h1 {
+  margin-top: 0;
+  text-align: center;
+  font-size: 1.6rem;
+}
+
+.formulario {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.formulario input {
+  flex: 1;
+  padding: 10px;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.formulario input:focus {
+  outline: 2px solid #4a7dff;
+  border-color: transparent;
+}
+
+.formulario button {
+  padding: 10px 16px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 8px;
+  background: #4a7dff;
+  color: #fff;
+  cursor: pointer;
+}
+
+.formulario button:hover {
+  background: #3a6ae6;
+}
+
+.lista {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.lista li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.lista li.completada span {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.lista span {
+  flex: 1;
+  cursor: pointer;
+  word-break: break-word;
+}
+
+.lista button {
+  border: none;
+  background: none;
+  color: #d33;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.contador {
+  text-align: center;
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 0;
+}

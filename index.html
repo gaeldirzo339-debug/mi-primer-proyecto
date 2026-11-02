@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi lista de tareas</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="contenedor">
+    <h1>Mi lista de tareas</h1>
+
+    <form id="formulario" class="formulario">
+      <input type="text" id="nueva-tarea" placeholder="Escribe una tarea..." autocomplete="off" required>
+      <button type="submit">Agregar</button>
+    </form>
+
+    <ul id="lista" class="lista"></ul>
+
+    <p id="contador" class="contador"></p>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
